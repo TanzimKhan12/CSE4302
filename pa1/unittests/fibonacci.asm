@@ -6,7 +6,7 @@ j fibonacci
 
 fibonacci:
 add $t3, $t2, $t1
-addq $t1, $zero, $t2
+add $t1, $zero, $t2
 add $t2, $zero, $t3
 addi $t5, $t5, 1
 bne $t5, $t9, fibonacci
