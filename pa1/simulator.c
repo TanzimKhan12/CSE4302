@@ -8,7 +8,7 @@
 #include "simulator.h"
 #include "mipsInstructionMap.h"
 
-int debug = 0;
+int debug = 1;
 int pipe_trace = 1;
 
 static FILE *fptr_pt;
@@ -137,17 +137,17 @@ unsigned int fetch(unsigned int instruction_fetch) {
 
 struct Registers decode(unsigned int instruction_fetch) {
   struct Registers reg_temp;
-
   // your code for decode phase goes here.
-  reg_temp.x = (instruction_fetch >> 26) & 0x3F;
+
+  reg_temp.x = instruction_fetch >> 26;
   reg_temp.y = instruction_fetch & 0x3F;
   reg_temp.rs = (instruction_fetch >> 21) & 0x1F;
   reg_temp.rt = (instruction_fetch >> 16) & 0x1F;
   reg_temp.rd = (instruction_fetch >> 11) & 0x1F;
   reg_temp.sa = (instruction_fetch >> 6) & 0x1F;
-  reg_temp.imm = instruction_fetch & 0x0000FFFF;
+  reg_temp.imm = instruction_fetch & 0xFFFF;
 
-  if ((reg_temp.x == LW) | (reg_temp.y == SW))
+  if ((reg_temp.x == LW) | (reg_temp.x == SW))
   {
     reg_temp.memory_flag = 1;
   }
@@ -162,7 +162,14 @@ struct Registers decode(unsigned int instruction_fetch) {
   reg_temp.A = registers[reg_temp.rs];
   reg_temp.B = registers[reg_temp.rt];
   reg_temp.C = registers[reg_temp.rd];
-
+  if (0x8000 & reg_temp.imm)
+  {
+     reg_temp.D = 0xFFFF0000 | reg_temp.imm;
+  }
+  else
+  {
+     reg_temp.D = reg_temp.imm;
+  }
   //Program Counter
 
   //R-type PC
@@ -178,15 +185,15 @@ struct Registers decode(unsigned int instruction_fetch) {
     }
   }
   //I-type PC
-  else if ((reg_temp.x == LW) | (reg_temp.x == SW) | (reg_temp.x == ANDI) | (reg_temp.x == ADDI) | (reg_temp.x == ORI) | (reg_temp.x == SLTI) | (reg_temp.x = LUI))
+  else if ((reg_temp.x == LW) | (reg_temp.x == SW) | (reg_temp.x == ANDI) | (reg_temp.x == ADDI) | (reg_temp.x == ORI) | (reg_temp.x == SLTI) | (reg_temp.x == LUI))
   {
     advance_pc(4);
   }
   else if (reg_temp.x == BEQ)
     {
        if (reg_temp.A == reg_temp.B)
-       {
-          pc = pc + 4 + reg_temp.imm;
+       { 
+          pc = pc + 4 + reg_temp.D;
        }
        else
        {
@@ -195,9 +202,9 @@ struct Registers decode(unsigned int instruction_fetch) {
     }
   else if (reg_temp.x == BNE)
    {
-      if (!(reg_temp.A == reg_temp.B))
+      if (reg_temp.A != reg_temp.B)
        {
-          pc = pc + 4 + reg_temp.imm;
+          pc = pc + 4 + reg_temp.D;
        }
        else
        {
@@ -207,15 +214,13 @@ struct Registers decode(unsigned int instruction_fetch) {
   else if ((reg_temp.x == J) | (reg_temp.x == JAL))
     {
       pc = (instruction_fetch & 0x03FFFFFF);
-    }
- 
+    } 
   return reg_temp;
 }
 
 
 struct Registers execute(struct Registers decode_out)
 {
-  
   // your code for execute phase goes here.
   //R-Type Functions
   if(decode_out.x == RTYPEOP)
@@ -259,22 +264,22 @@ struct Registers execute(struct Registers decode_out)
   switch(decode_out.x)
   {
      case LW:
-         decode_out.addr_mem = decode_out.A + decode_out.imm;
+         decode_out.addr_mem = decode_out.A + decode_out.D;
          break;
      case SW:
-         decode_out.addr_mem = decode_out.A + decode_out.imm;
+         decode_out.addr_mem = decode_out.A + decode_out.D;
          break;
      case ANDI:
-         decode_out.B = decode_out.A & decode_out.imm;
+         decode_out.B = decode_out.A & decode_out.D;
          break;
      case ADDI:
-         decode_out.B = decode_out.A + decode_out.imm;
+         decode_out.B = decode_out.A + decode_out.D;
          break;
      case ORI:
-         decode_out.B = decode_out.A | decode_out.imm;
+         decode_out.B = decode_out.A | decode_out.D;
          break;
      case SLTI:
-         if(decode_out.A < decode_out.imm)
+         if(decode_out.A < decode_out.D)
          {
              decode_out.B = 1;
          }
@@ -284,12 +289,13 @@ struct Registers execute(struct Registers decode_out)
          }
          break;
      case LUI:
-         decode_out.B = decode_out.imm << 16;
+         decode_out.B = decode_out.D << 16;
          break;
      default:
          break;
   }
-  return decode_out;
+
+   return decode_out;
 }
 
 
@@ -297,7 +303,6 @@ struct Registers memory_stage(struct Registers alu_out)
 {
   
   // your code for memory phase goes here.
-
   //I-Type
   switch(alu_out.x)
   {
@@ -317,12 +322,11 @@ struct Registers memory_stage(struct Registers alu_out)
 
 unsigned int write_back_stage(struct Registers mem_out)
 {
-  
   // your code for write back phase goes here.
   //R-Type
   if((mem_out.x == RTYPEOP) & (mem_out.y != JR))
   {
-       mem_out.rd = mem_out.C;
+       registers[mem_out.rd] = mem_out.C;
   }
 
   //I-type
@@ -332,7 +336,7 @@ unsigned int write_back_stage(struct Registers mem_out)
   }
 
   //J-Type
-  if(mem_out.x = JAL)
+  if(mem_out.x == JAL)
   {
      registers[31] = mem_out.jmp_out_31;
   }
